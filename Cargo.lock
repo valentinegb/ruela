@@ -903,6 +903,7 @@ name = "mod-bot"
 version = "0.1.0"
 dependencies = [
  "poise",
+ "tokio",
 ]
 
 [[package]]
