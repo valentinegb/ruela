@@ -1,5 +1,6 @@
+use poise::serenity_prelude::{self as serenity, GatewayIntents, Token};
 use poise_error::anyhow;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() {
@@ -13,8 +14,18 @@ async fn main() {
 async fn try_main() -> anyhow::Result<()> {
     info!("Starting up");
 
-    // TODO
+    #[cfg(debug_assertions)]
+    if let Err(err) = dotenvy::dotenv() {
+        warn!("Could not load `.env` file: {err:#}");
+    }
 
+    let mut client = serenity::Client::builder(
+        Token::from_env("MOD_BOT_DISCORD_TOKEN")?,
+        GatewayIntents::empty(),
+    )
+    .await?;
+
+    client.start_autosharded().await?;
     info!("Shutting down");
 
     Ok(())
