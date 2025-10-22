@@ -1,24 +1,21 @@
 mod data;
 
-use std::{
-    str::FromStr as _,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use poise::{
     CreateReply, command,
     samples::create_application_commands,
     serenity_prelude::{
         self as serenity, CreateCommand, CreateComponent, CreateContainer, CreateSeparator,
-        CreateTextDisplay, FullEvent, GatewayIntents, HttpError, MessageFlags, Permissions,
-        StatusCode, Token, async_trait,
+        CreateTextDisplay, FullEvent, GatewayIntents, MessageFlags, Permissions, StatusCode, Token,
+        async_trait,
     },
 };
 use poise_error::{
     UserError,
     anyhow::{self, bail},
 };
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::data::{Data, INVOCABLE_IN_GUILD, Rule, Rules, RulesMessage, get_guild_id_from_ctx};
 
@@ -153,26 +150,12 @@ async fn list(
                 }
             })
         {
-            let message = result?;
-
-            // TODO: I'm doing it like this instead of using `UserError` because
-            //       `poise_error` does not facilite styling the message, i.e.
-            //       including a link to a message. When you get the chance, me,
-            //       work on `poise_error`! Make it better! Should probably use
-            //       components v2.
-            ctx.send(
-                CreateReply::new()
-                    .content(format!(
-                        "A persistent rule list already exists and there can \
-                         only be one per server.\n\
-                         Please delete {} if you want to send a new one.",
-                        message.link(),
-                    ))
-                    .ephemeral(true),
-            )
-            .await?;
-
-            return Ok(());
+            bail!(UserError::from(format!(
+                "A persistent rule list already exists and there can only be one \
+                 per server.\n\
+                 Please delete {} if you want to send a new one.",
+                result?.link(),
+            )));
         }
 
         ctx.defer().await?;

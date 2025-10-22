@@ -1122,7 +1122,7 @@ dependencies = [
 [[package]]
 name = "poise_error"
 version = "1.6.0"
-source = "git+https://github.com/valentinegb/poise-error.git?branch=serenity-next#5124339224ddd955206330c252512ca89a0ef37f"
+source = "git+https://github.com/valentinegb/poise-error.git?branch=serenity-next#b737e71489ead7c701e9bebc4399106942cde024"
 dependencies = [
  "anyhow",
  "poise",
