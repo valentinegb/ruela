@@ -7,9 +7,12 @@ edition = "2024"
 # Be sure serenity is on commit `5746fadda4313ff00898ee8b13eadcf08dd89442` in
 # `Cargo.lock`. At the time of writing, that's the latest commit compatible with
 # poise.
+ciborium = "0.2.2"
+directories = "6.0.0"
 dotenvy = "0.15.7"
 poise = { git = "https://github.com/serenity-rs/poise.git", branch = "serenity-next", version = "0.6.1" }
 poise_error = { git = "https://github.com/valentinegb/poise-error.git", branch = "serenity-next", version = "1.6.0" }
+serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
