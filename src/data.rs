@@ -88,9 +88,9 @@ impl DerefMut for Rules {
 
 #[derive(Deserialize, Serialize)]
 pub struct Rule {
-    original: TimestampedText,
-    amendments: Vec<TimestampedText>,
-    repealed: bool,
+    pub original: TimestampedText,
+    pub amendments: Vec<TimestampedText>,
+    pub repealed: bool,
 }
 
 impl Rule {
@@ -104,9 +104,9 @@ impl Rule {
 }
 
 #[derive(Deserialize, Serialize)]
-struct TimestampedText {
-    text: String,
-    timestamp: u64,
+pub struct TimestampedText {
+    pub text: String,
+    pub timestamp: u64,
 }
 
 impl TimestampedText {

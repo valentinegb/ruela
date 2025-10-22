@@ -164,18 +164,32 @@ async fn list(
     }
 
     let rules = Rules::get_data_from(guild_id)?;
+    let rule_list_items: Vec<String> = rules
+        .iter()
+        .enumerate()
+        .filter(|(_i, rule)| !rule.repealed)
+        .map(|(i, rule)| {
+            format!(
+                "{}\\. {}",
+                i + 1,
+                rule.amendments.last().unwrap_or(&rule.original).text,
+            )
+        })
+        .collect();
     let message = ctx
         .send(
             CreateReply::new()
                 .flags(MessageFlags::IS_COMPONENTS_V2)
                 .components(&[CreateComponent::Container(CreateContainer::new(&[
-                    CreateComponent::TextDisplay(CreateTextDisplay::new(
+                    CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
                         "### Rules\n\
-                     1\\. Placeholder rule\n\
-                     2\\. Placeholder rule\n\
-                     4\\. Placeholder rule\n\
-                     5\\. Placeholder rule",
-                    )),
+                         {}",
+                        if rule_list_items.is_empty() {
+                            "There are none. Let there be anarchy!".to_string()
+                        } else {
+                            rule_list_items.join("\n")
+                        }
+                    ))),
                     CreateComponent::Separator(CreateSeparator::new(true)),
                     CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
                         "-# Last updated <t:{}:R>",
