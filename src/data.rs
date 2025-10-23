@@ -9,7 +9,7 @@ use directories::ProjectDirs;
 use poise::serenity_prelude::{
     self as serenity, CacheHttp, GenericChannelId, GuildId, Message, MessageId,
 };
-use poise_error::anyhow::{self, anyhow};
+use poise_error::anyhow::{self, Context, anyhow};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub const INVOCABLE_IN_GUILD: &str = "should only be invocable in a guild";
@@ -55,13 +55,17 @@ impl OrganizationalUnit for GuildId {
 
 pub trait Data<U: OrganizationalUnit>: DeserializeOwned + Serialize + Default {
     const PATH: &str;
+    /// User-facing descriptor of what this data represents. Used in error messages.
+    const DESCRIPTOR: &str;
 
     fn get_data_from(unit: U) -> anyhow::Result<Self> {
         unit.get_data(Self::PATH)
+            .context(format!("could not get {}", Self::DESCRIPTOR))
     }
 
     fn set_data_for(&self, unit: U) -> anyhow::Result<()> {
         unit.set_data(Self::PATH, self)
+            .context(format!("could not set {}", Self::DESCRIPTOR))
     }
 }
 
@@ -70,6 +74,7 @@ pub struct Rules(Vec<Rule>);
 
 impl Data<GuildId> for Rules {
     const PATH: &str = "rules.cbor";
+    const DESCRIPTOR: &str = "server rules";
 }
 
 impl Deref for Rules {
@@ -90,7 +95,7 @@ impl DerefMut for Rules {
 pub struct Rule {
     pub original: TimestampedText,
     pub amendments: Vec<TimestampedText>,
-    pub repealed: bool,
+    pub repealed: Option<u64>,
 }
 
 impl Rule {
@@ -98,7 +103,7 @@ impl Rule {
         Self {
             original: TimestampedText::new(text),
             amendments: Vec::new(),
-            repealed: false,
+            repealed: None,
         }
     }
 }
@@ -126,6 +131,7 @@ pub struct RulesMessage(Option<(GenericChannelId, MessageId)>);
 
 impl Data<GuildId> for RulesMessage {
     const PATH: &str = "rules_message.cbor";
+    const DESCRIPTOR: &str = "persistent rule list message";
 }
 
 impl From<Message> for RulesMessage {
