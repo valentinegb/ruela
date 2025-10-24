@@ -1,7 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
-    str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
+    time::UNIX_EPOCH,
 };
 
 use poise::{
@@ -107,7 +106,7 @@ impl RulesMessage {
 /// Commands related to the rules of this server.
 #[command(
     slash_command,
-    subcommands("new", "repeal", "list"),
+    subcommands("new", "amend", "repeal", "list"),
     interaction_context = "Guild"
 )]
 pub async fn rule(_ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
@@ -143,6 +142,46 @@ async fn new(
             )
             .await?;
     }
+
+    Ok(())
+}
+
+/// Change the definition of a rule.
+#[command(slash_command, required_permissions = "MANAGE_GUILD", ephemeral)]
+async fn amend(
+    ctx: poise_error::Context<'_>,
+    #[description = "The rule to amend."]
+    #[autocomplete = "rule_autocomplete"]
+    #[rename = "rule"]
+    rule_n: u64,
+    #[description = "New definition of the rule."] text: String,
+) -> anyhow::Result<()> {
+    let guild_id = get_guild_id_from_ctx(ctx);
+    let mut rules = Rules::get_data_from(guild_id)?;
+    let rule = rules
+        .get_mut(rule_n as usize - 1)
+        .ok_or(UserError::from(format!("There is no rule {rule_n}.")))?;
+
+    if rule.repealed.is_some() {
+        bail!(UserError::from(format!(
+            "Rule {rule_n} has been repealed, it cannot be amended now."
+        )));
+    }
+
+    let prev_text = rule
+        .amendments
+        .last()
+        .unwrap_or(&rule.original)
+        .text
+        .clone();
+
+    rule.amendments.push(TimestampedText::new(&text));
+    rules.set_data_for(guild_id)?;
+    ctx.say(format!(
+        "Rule {rule_n}, previously {prev_text:?}, has been amended to be {text:?}."
+    ))
+    .await?;
+    update_rule_list(ctx, guild_id).await?;
 
     Ok(())
 }
@@ -185,19 +224,7 @@ async fn repeal(
     rules.set_data_for(guild_id)?;
     ctx.say(format!("Rule {rule_n}, {rule_text:?}, has been repealed."))
         .await?;
-
-    if let Some(result) = RulesMessage::get_data_from(guild_id)?.get(ctx).await
-        && !result.as_ref().is_err_and(is_not_found_error)
-    {
-        let mut message = result?;
-
-        message
-            .edit(
-                ctx,
-                compile_rule_list(guild_id)?.to_prefix_edit(EditMessage::new()),
-            )
-            .await?;
-    }
+    update_rule_list(ctx, guild_id).await?;
 
     Ok(())
 }
@@ -235,6 +262,23 @@ async fn rule_autocomplete<'a>(
             .map(|(rule_n, str)| AutocompleteChoice::new(str, rule_n))
             .collect::<Vec<AutocompleteChoice>>(),
     )
+}
+
+async fn update_rule_list(ctx: poise_error::Context<'_>, guild_id: GuildId) -> anyhow::Result<()> {
+    if let Some(result) = RulesMessage::get_data_from(guild_id)?.get(ctx).await
+        && !result.as_ref().is_err_and(is_not_found_error)
+    {
+        let mut message = result?;
+
+        message
+            .edit(
+                ctx,
+                compile_rule_list(guild_id)?.to_prefix_edit(EditMessage::new()),
+            )
+            .await?;
+    }
+
+    Ok(())
 }
 
 /// Lists the rules of this server.
