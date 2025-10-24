@@ -1,5 +1,6 @@
 use std::{
     ops::{Deref, DerefMut},
+    str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -18,6 +19,8 @@ use poise_error::{
 use serde::{Deserialize, Serialize};
 
 use crate::data::{Data, INVOCABLE_IN_GUILD, get_guild_id_from_ctx};
+
+const UNIX_EPOCH_ELAPSED_ERR: &str = "time travel is real";
 
 #[derive(Deserialize, Serialize, Default)]
 struct Rules(Vec<Rule>);
@@ -68,9 +71,9 @@ impl TimestampedText {
     fn new(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time travel is real")
+            timestamp: UNIX_EPOCH
+                .elapsed()
+                .expect(UNIX_EPOCH_ELAPSED_ERR)
                 .as_secs(),
         }
     }
@@ -150,11 +153,53 @@ async fn repeal(
     ctx: poise_error::Context<'_>,
     #[description = "The rule to repeal."]
     #[autocomplete = "rule_autocomplete"]
-    rule: usize,
+    #[rename = "rule"]
+    rule_n: u64,
 ) -> anyhow::Result<()> {
-    let mut rules = Rules::get_data_from(get_guild_id_from_ctx(ctx))?;
+    let guild_id = get_guild_id_from_ctx(ctx);
+    let mut rules = Rules::get_data_from(guild_id)?;
+    let rule = rules
+        .get_mut(rule_n as usize - 1)
+        .ok_or(UserError::from(format!("There is no rule {rule_n}.")))?;
 
-    todo!()
+    if rule.repealed.is_some() {
+        bail!(UserError::from(format!(
+            "Rule {rule_n} has already been repealed."
+        )));
+    }
+
+    rule.repealed = Some(
+        UNIX_EPOCH
+            .elapsed()
+            .expect(UNIX_EPOCH_ELAPSED_ERR)
+            .as_secs(),
+    );
+
+    let rule_text = rule
+        .amendments
+        .last()
+        .unwrap_or(&rule.original)
+        .text
+        .clone();
+
+    rules.set_data_for(guild_id)?;
+    ctx.say(format!("Rule {rule_n}, {rule_text:?}, has been repealed."))
+        .await?;
+
+    if let Some(result) = RulesMessage::get_data_from(guild_id)?.get(ctx).await
+        && !result.as_ref().is_err_and(is_not_found_error)
+    {
+        let mut message = result?;
+
+        message
+            .edit(
+                ctx,
+                compile_rule_list(guild_id)?.to_prefix_edit(EditMessage::new()),
+            )
+            .await?;
+    }
+
+    Ok(())
 }
 
 async fn rule_autocomplete<'a>(
@@ -176,23 +221,18 @@ async fn rule_autocomplete<'a>(
             .enumerate()
             .filter(|(_i, rule)| rule.repealed.is_none())
             .map(|(i, rule)| {
+                let rule_n = i as u64 + 1;
+
                 (
-                    i,
+                    rule_n,
                     format!(
-                        "{}. {}",
-                        i + 1,
+                        "{rule_n}. {}",
                         rule.amendments.last().unwrap_or(&rule.original).text,
                     ),
                 )
             })
-            .filter(|(_i, str)| str.to_lowercase().contains(query))
-            .map(|(i, str)| {
-                AutocompleteChoice::new(
-                    str,
-                    u64::try_from(i)
-                        .expect("should be running on a system that isn't more than 64 bit"),
-                )
-            })
+            .filter(|(_rule_n, str)| str.to_lowercase().contains(query))
+            .map(|(rule_n, str)| AutocompleteChoice::new(str, rule_n))
             .collect::<Vec<AutocompleteChoice>>(),
     )
 }
@@ -278,9 +318,9 @@ fn compile_rule_list<'a>(guild_id: GuildId) -> anyhow::Result<CreateReply<'a>> {
                 CreateComponent::Separator(CreateSeparator::new(true)),
                 CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
                     "-# Last updated <t:{}:R>",
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .expect("time travel is real")
+                    UNIX_EPOCH
+                        .elapsed()
+                        .expect(UNIX_EPOCH_ELAPSED_ERR)
                         .as_secs(),
                 ))),
             ],
