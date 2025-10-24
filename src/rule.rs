@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     ops::{Deref, DerefMut},
     time::UNIX_EPOCH,
 };
@@ -106,7 +107,7 @@ impl RulesMessage {
 /// Commands related to the rules of this server.
 #[command(
     slash_command,
-    subcommands("new", "amend", "repeal", "list"),
+    subcommands("new", "amend", "repeal", "list", "history"),
     interaction_context = "Guild"
 )]
 pub async fn rule(_ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
@@ -352,7 +353,7 @@ fn compile_rule_list<'a>(guild_id: GuildId) -> anyhow::Result<CreateReply<'a>> {
             vec![
                 CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
                     "### Rules\n\
-                 {}",
+                     {}",
                     if rule_list_items.is_empty() {
                         "There are none. Let there be anarchy!".to_string()
                     } else {
@@ -381,4 +382,81 @@ fn is_not_found_error(err: &serenity::Error) -> bool {
     } else {
         false
     }
+}
+
+/// Lists everything that's happened to the rules in chronological order.
+#[command(slash_command, ephemeral)]
+async fn history(ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
+    enum Event {
+        Instated(String),
+        Amended(String),
+        Repealed,
+    }
+
+    impl std::fmt::Display for Event {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Event::Instated(text) => write!(f, "instated as {text:?}"),
+                Event::Amended(text) => write!(f, "amended to {text:?}"),
+                Event::Repealed => write!(f, "repealed"),
+            }
+        }
+    }
+
+    let rules = Rules::get_data_from(get_guild_id_from_ctx(ctx))?.0;
+    let mut events: BTreeMap<u64, (usize, Event)> = BTreeMap::new();
+
+    for (i, rule) in rules.into_iter().enumerate() {
+        events.insert(
+            rule.original.timestamp,
+            (i, Event::Instated(rule.original.text)),
+        );
+
+        for amendment in rule.amendments {
+            events.insert(amendment.timestamp, (i, Event::Amended(amendment.text)));
+        }
+
+        if let Some(repealed) = rule.repealed {
+            events.insert(repealed, (i, Event::Repealed));
+        }
+    }
+
+    let mut events_list = String::new();
+
+    for (i, (timestamp, (rule_i, event))) in events.into_iter().enumerate() {
+        if i != 0 {
+            events_list += "\n";
+        }
+
+        events_list += &format!("<t:{timestamp}:f>: rule {} was {event}.", rule_i + 1);
+    }
+
+    ctx.send(
+        CreateReply::new()
+            .flags(MessageFlags::IS_COMPONENTS_V2)
+            .components(vec![CreateComponent::Container(CreateContainer::new(
+                vec![
+                    CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+                        "### Rule History\n\
+                         {}",
+                        if events_list.is_empty() {
+                            "*Intentionally left blank.*".to_string()
+                        } else {
+                            events_list
+                        }
+                    ))),
+                    CreateComponent::Separator(CreateSeparator::new(true)),
+                    CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+                        "-# Last updated <t:{}:R>",
+                        UNIX_EPOCH
+                            .elapsed()
+                            .expect(UNIX_EPOCH_ELAPSED_ERR)
+                            .as_secs(),
+                    ))),
+                ],
+            ))]),
+    )
+    .await?;
+
+    Ok(())
 }
