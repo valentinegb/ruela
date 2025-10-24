@@ -452,7 +452,7 @@ async fn history(ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
         }
 
         events_list += &format!(
-            "<t:{timestamp}:f>: rule {} was {event} by {}.",
+            "- <t:{timestamp}:f>: rule {} was {event} by {}.",
             rule_i + 1,
             user.mention(),
         );
