@@ -7,9 +7,10 @@ use std::{
 use poise::{
     CreateReply, command,
     serenity_prelude::{
-        self as serenity, AutocompleteChoice, CacheHttp, CreateAutocompleteResponse,
-        CreateComponent, CreateContainer, CreateSeparator, CreateTextDisplay, EditMessage,
-        GenericChannelId, GuildId, Message, MessageFlags, MessageId, Permissions, StatusCode,
+        self as serenity, AutocompleteChoice, CacheHttp, CreateAllowedMentions,
+        CreateAutocompleteResponse, CreateComponent, CreateContainer, CreateSeparator,
+        CreateTextDisplay, EditMessage, GenericChannelId, GuildId, Mentionable, Message,
+        MessageFlags, MessageId, Permissions, StatusCode, UserId,
     },
 };
 use poise_error::{
@@ -46,15 +47,15 @@ impl DerefMut for Rules {
 
 #[derive(Deserialize, Serialize)]
 struct Rule {
-    original: TimestampedText,
-    amendments: Vec<TimestampedText>,
-    repealed: Option<u64>,
+    original: AttributedText,
+    amendments: Vec<AttributedText>,
+    repealed: Option<Attribution>,
 }
 
 impl Rule {
-    fn new(text: impl Into<String>) -> Self {
+    fn new(text: impl Into<String>, user: UserId) -> Self {
         Self {
-            original: TimestampedText::new(text),
+            original: AttributedText::new(text, user),
             amendments: Vec::new(),
             repealed: None,
         }
@@ -62,15 +63,30 @@ impl Rule {
 }
 
 #[derive(Deserialize, Serialize)]
-struct TimestampedText {
+struct AttributedText {
     text: String,
+    attribution: Attribution,
+}
+
+impl AttributedText {
+    fn new(text: impl Into<String>, user: UserId) -> Self {
+        Self {
+            text: text.into(),
+            attribution: user.into(),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+struct Attribution {
+    user: UserId,
     timestamp: u64,
 }
 
-impl TimestampedText {
-    fn new(text: impl Into<String>) -> Self {
+impl From<UserId> for Attribution {
+    fn from(value: UserId) -> Self {
         Self {
-            text: text.into(),
+            user: value,
             timestamp: UNIX_EPOCH
                 .elapsed()
                 .expect(UNIX_EPOCH_ELAPSED_ERR)
@@ -123,7 +139,7 @@ async fn new(
     let guild_id = get_guild_id_from_ctx(ctx);
     let mut rules = Rules::get_data_from(guild_id)?;
 
-    rules.push(Rule::new(&text));
+    rules.push(Rule::new(&text, ctx.author().id));
     rules.set_data_for(guild_id)?;
     ctx.say(format!(
         "Rule {}, {text:?}, has been instated.",
@@ -176,7 +192,8 @@ async fn amend(
         .text
         .clone();
 
-    rule.amendments.push(TimestampedText::new(&text));
+    rule.amendments
+        .push(AttributedText::new(&text, ctx.author().id));
     rules.set_data_for(guild_id)?;
     ctx.say(format!(
         "Rule {rule_n}, previously {prev_text:?}, has been amended to be {text:?}."
@@ -208,12 +225,7 @@ async fn repeal(
         )));
     }
 
-    rule.repealed = Some(
-        UNIX_EPOCH
-            .elapsed()
-            .expect(UNIX_EPOCH_ELAPSED_ERR)
-            .as_secs(),
-    );
+    rule.repealed = Some(ctx.author().id.into());
 
     let rule_text = rule
         .amendments
@@ -404,31 +416,46 @@ async fn history(ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
     }
 
     let rules = Rules::get_data_from(get_guild_id_from_ctx(ctx))?.0;
-    let mut events: BTreeMap<u64, (usize, Event)> = BTreeMap::new();
+    let mut events: BTreeMap<u64, (usize, Event, UserId)> = BTreeMap::new();
 
     for (i, rule) in rules.into_iter().enumerate() {
         events.insert(
-            rule.original.timestamp,
-            (i, Event::Instated(rule.original.text)),
+            rule.original.attribution.timestamp,
+            (
+                i,
+                Event::Instated(rule.original.text),
+                rule.original.attribution.user,
+            ),
         );
 
         for amendment in rule.amendments {
-            events.insert(amendment.timestamp, (i, Event::Amended(amendment.text)));
+            events.insert(
+                amendment.attribution.timestamp,
+                (
+                    i,
+                    Event::Amended(amendment.text),
+                    amendment.attribution.user,
+                ),
+            );
         }
 
         if let Some(repealed) = rule.repealed {
-            events.insert(repealed, (i, Event::Repealed));
+            events.insert(repealed.timestamp, (i, Event::Repealed, repealed.user));
         }
     }
 
     let mut events_list = String::new();
 
-    for (i, (timestamp, (rule_i, event))) in events.into_iter().enumerate() {
+    for (i, (timestamp, (rule_i, event, user))) in events.into_iter().enumerate() {
         if i != 0 {
             events_list += "\n";
         }
 
-        events_list += &format!("<t:{timestamp}:f>: rule {} was {event}.", rule_i + 1);
+        events_list += &format!(
+            "<t:{timestamp}:f>: rule {} was {event} by {}.",
+            rule_i + 1,
+            user.mention(),
+        );
     }
 
     ctx.send(
@@ -454,7 +481,8 @@ async fn history(ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
                             .as_secs(),
                     ))),
                 ],
-            ))]),
+            ))])
+            .allowed_mentions(CreateAllowedMentions::new()),
     )
     .await?;
 
