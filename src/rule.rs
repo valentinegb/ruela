@@ -185,7 +185,7 @@ async fn rule_autocomplete<'a>(
                     ),
                 )
             })
-            .filter(|(_i, str)| str.contains(query))
+            .filter(|(_i, str)| str.to_lowercase().contains(query))
             .map(|(i, str)| {
                 AutocompleteChoice::new(
                     str,
