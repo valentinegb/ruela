@@ -6,9 +6,9 @@ use std::{
 use poise::{
     CreateReply, command,
     serenity_prelude::{
-        self as serenity, CacheHttp, CreateComponent, CreateContainer, CreateSeparator,
-        CreateTextDisplay, EditMessage, GenericChannelId, GuildId, Message, MessageFlags,
-        MessageId, Permissions, StatusCode,
+        self as serenity, AutocompleteChoice, CacheHttp, CreateAutocompleteResponse,
+        CreateComponent, CreateContainer, CreateSeparator, CreateTextDisplay, EditMessage,
+        GenericChannelId, GuildId, Message, MessageFlags, MessageId, Permissions, StatusCode,
     },
 };
 use poise_error::{
@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::data::{Data, INVOCABLE_IN_GUILD, get_guild_id_from_ctx};
 
 #[derive(Deserialize, Serialize, Default)]
-pub struct Rules(Vec<Rule>);
+struct Rules(Vec<Rule>);
 
 impl Data<GuildId> for Rules {
     const PATH: &str = "rules.cbor";
@@ -42,14 +42,14 @@ impl DerefMut for Rules {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct Rule {
-    pub original: TimestampedText,
-    pub amendments: Vec<TimestampedText>,
-    pub repealed: Option<u64>,
+struct Rule {
+    original: TimestampedText,
+    amendments: Vec<TimestampedText>,
+    repealed: Option<u64>,
 }
 
 impl Rule {
-    pub fn new(text: impl Into<String>) -> Self {
+    fn new(text: impl Into<String>) -> Self {
         Self {
             original: TimestampedText::new(text),
             amendments: Vec::new(),
@@ -59,9 +59,9 @@ impl Rule {
 }
 
 #[derive(Deserialize, Serialize)]
-pub struct TimestampedText {
-    pub text: String,
-    pub timestamp: u64,
+struct TimestampedText {
+    text: String,
+    timestamp: u64,
 }
 
 impl TimestampedText {
@@ -91,10 +91,7 @@ impl From<Message> for RulesMessage {
 }
 
 impl RulesMessage {
-    pub async fn get(
-        &self,
-        cache_http: impl CacheHttp,
-    ) -> Option<Result<Message, serenity::Error>> {
+    async fn get(&self, cache_http: impl CacheHttp) -> Option<Result<Message, serenity::Error>> {
         match self.0 {
             Some((channel_id, message_id)) => {
                 Some(channel_id.message(cache_http, message_id).await)
@@ -107,7 +104,7 @@ impl RulesMessage {
 /// Commands related to the rules of this server.
 #[command(
     slash_command,
-    subcommands("new", "list"),
+    subcommands("new", "repeal", "list"),
     interaction_context = "Guild"
 )]
 pub async fn rule(_ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
@@ -145,6 +142,59 @@ async fn new(
     }
 
     Ok(())
+}
+
+/// Declare a rule as no longer valid.
+#[command(slash_command, required_permissions = "MANAGE_GUILD", ephemeral)]
+async fn repeal(
+    ctx: poise_error::Context<'_>,
+    #[description = "The rule to repeal."]
+    #[autocomplete = "rule_autocomplete"]
+    rule: usize,
+) -> anyhow::Result<()> {
+    let mut rules = Rules::get_data_from(get_guild_id_from_ctx(ctx))?;
+
+    todo!()
+}
+
+async fn rule_autocomplete<'a>(
+    ctx: poise_error::Context<'_>,
+    query: &str,
+) -> CreateAutocompleteResponse<'a> {
+    // Noooo! You can't just read and deserialize the rules every single time a
+    // user types a letter into the rule option!!!!
+    // The chad:
+    let rules = Rules::get_data_from(get_guild_id_from_ctx(ctx)).unwrap();
+    // It's better for this ^ to panic than for this function to return an empty
+    // list, because returning an empty list will cause Discord to say there
+    // were no results, while panicking will cause Discord to say that an error
+    // occurred, which is more correct.
+
+    CreateAutocompleteResponse::new().set_choices(
+        rules
+            .iter()
+            .enumerate()
+            .filter(|(_i, rule)| rule.repealed.is_none())
+            .map(|(i, rule)| {
+                (
+                    i,
+                    format!(
+                        "{}. {}",
+                        i + 1,
+                        rule.amendments.last().unwrap_or(&rule.original).text,
+                    ),
+                )
+            })
+            .filter(|(_i, str)| str.contains(query))
+            .map(|(i, str)| {
+                AutocompleteChoice::new(
+                    str,
+                    u64::try_from(i)
+                        .expect("should be running on a system that isn't more than 64 bit"),
+                )
+            })
+            .collect::<Vec<AutocompleteChoice>>(),
+    )
 }
 
 /// Lists the rules of this server.
