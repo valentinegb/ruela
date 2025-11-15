@@ -1,0 +1,27 @@
+{
+  "nodes": {
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1762841334,
+        "narHash": "sha256-48ihoOyLMvbTz/QTfZ2fjTd97kK6qCgMYqrIyHKcOlI=",
+        "owner": "tvbeat",
+        "repo": "nixpkgs",
+        "rev": "f93a104922f934f31060c3d76c34b9ddcd8ce10b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tvbeat",
+        "ref": "rust191-1",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

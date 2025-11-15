@@ -10,7 +10,8 @@ use poise::{
     },
 };
 use poise_error::anyhow;
-use tracing::{error, info, warn};
+use tracing::{error, info};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 use crate::{rule::rule, strikes::strike};
 
@@ -37,7 +38,21 @@ impl serenity::EventHandler for EventHandler<'_> {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("ruela=debug,info"))
+        .unwrap();
+    let registry = tracing_subscriber::registry().with(filter_layer);
+
+    match tracing_journald::layer() {
+        Ok(journald_layer) => {
+            registry.with(journald_layer).init();
+        }
+        Err(_) => {
+            let fmt_layer = tracing_subscriber::fmt::layer().with_target(false);
+
+            registry.with(fmt_layer).init();
+        }
+    }
 
     if let Err(err) = try_main().await {
         error!("Fatal error: {err:#}");
@@ -49,12 +64,12 @@ async fn try_main() -> anyhow::Result<()> {
 
     #[cfg(debug_assertions)]
     if let Err(err) = dotenvy::dotenv() {
-        warn!("Could not load `.env` file: {err:#}");
+        tracing::warn!("Could not load `.env` file: {err:#}");
     }
 
     let commands = vec![rule(), strike()];
     let mut client = serenity::Client::builder(
-        Token::from_env("MOD_BOT_DISCORD_TOKEN")?,
+        Token::from_env("RUELA_DISCORD_TOKEN")?,
         GatewayIntents::GUILDS,
     )
     .event_handler(EventHandler {
