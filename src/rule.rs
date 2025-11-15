@@ -19,12 +19,12 @@ use poise_error::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::data::{Data, INVOCABLE_IN_GUILD, get_guild_id_from_ctx};
-
-const UNIX_EPOCH_ELAPSED_ERR: &str = "time travel is real";
+use crate::data::{
+    Attribution, Data, INVOCABLE_IN_GUILD, UNIX_EPOCH_ELAPSED_ERR, get_guild_id_from_ctx,
+};
 
 #[derive(Deserialize, Serialize, Default)]
-struct Rules(Vec<Rule>);
+pub struct Rules(Vec<Rule>);
 
 impl Data<GuildId> for Rules {
     const PATH: &str = "rules.cbor";
@@ -46,10 +46,20 @@ impl DerefMut for Rules {
 }
 
 #[derive(Deserialize, Serialize)]
-struct Rule {
+pub struct Rule {
     original: AttributedText,
     amendments: Vec<AttributedText>,
     repealed: Option<Attribution>,
+}
+
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.amendments.last().unwrap_or(&self.original).text,
+        )
+    }
 }
 
 impl Rule {
@@ -73,24 +83,6 @@ impl AttributedText {
         Self {
             text: text.into(),
             attribution: user.into(),
-        }
-    }
-}
-
-#[derive(Deserialize, Serialize)]
-struct Attribution {
-    user: UserId,
-    timestamp: u64,
-}
-
-impl From<UserId> for Attribution {
-    fn from(value: UserId) -> Self {
-        Self {
-            user: value,
-            timestamp: UNIX_EPOCH
-                .elapsed()
-                .expect(UNIX_EPOCH_ELAPSED_ERR)
-                .as_secs(),
         }
     }
 }
@@ -242,7 +234,7 @@ async fn repeal(
     Ok(())
 }
 
-async fn rule_autocomplete<'a>(
+pub async fn rule_autocomplete<'a>(
     ctx: poise_error::Context<'_>,
     query: &str,
 ) -> CreateAutocompleteResponse<'a> {
@@ -263,16 +255,23 @@ async fn rule_autocomplete<'a>(
             .map(|(i, rule)| {
                 let rule_n = i as u64 + 1;
 
-                (
-                    rule_n,
-                    format!(
-                        "{rule_n}. {}",
-                        rule.amendments.last().unwrap_or(&rule.original).text,
-                    ),
-                )
+                (rule_n, format!("{rule_n}. {rule}"))
             })
             .filter(|(_rule_n, str)| str.to_lowercase().contains(query))
-            .map(|(rule_n, str)| AutocompleteChoice::new(str, rule_n))
+            .map(|(rule_n, mut str)| {
+                AutocompleteChoice::new(
+                    // FIXME: Markdown formatting should be removed since
+                    // autocomplete options displayed using Markdown.
+                    if str.len() > 99 {
+                        str.truncate(99);
+
+                        str + "…"
+                    } else {
+                        str
+                    },
+                    rule_n,
+                )
+            })
             .collect::<Vec<AutocompleteChoice>>(),
     )
 }
@@ -350,13 +349,7 @@ fn compile_rule_list<'a>(guild_id: GuildId) -> anyhow::Result<CreateReply<'a>> {
         .iter()
         .enumerate()
         .filter(|(_i, rule)| rule.repealed.is_none())
-        .map(|(i, rule)| {
-            format!(
-                "{}\\. {}",
-                i + 1,
-                rule.amendments.last().unwrap_or(&rule.original).text,
-            )
-        })
+        .map(|(i, rule)| format!("{}\\. {rule}", i + 1))
         .collect();
 
     Ok(CreateReply::new()

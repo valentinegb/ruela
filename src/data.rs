@@ -1,14 +1,16 @@
 use std::{
     fs::exists,
     path::{Path, PathBuf},
+    time::UNIX_EPOCH,
 };
 
 use directories::ProjectDirs;
-use poise::serenity_prelude::GuildId;
+use poise::serenity_prelude::{GuildId, Member, UserId};
 use poise_error::anyhow::{self, Context, anyhow};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub const INVOCABLE_IN_GUILD: &str = "should only be invocable in a guild";
+pub const UNIX_EPOCH_ELAPSED_ERR: &str = "time travel is real";
 
 pub trait OrganizationalUnit {
     fn dir(&self) -> anyhow::Result<PathBuf>;
@@ -43,9 +45,25 @@ pub trait OrganizationalUnit {
     }
 }
 
+impl<T: OrganizationalUnit> OrganizationalUnit for &T {
+    fn dir(&self) -> anyhow::Result<PathBuf> {
+        T::dir(self)
+    }
+}
+
 impl OrganizationalUnit for GuildId {
     fn dir(&self) -> anyhow::Result<PathBuf> {
         Ok(data_dir()?.join("guilds").join(self.get().to_string()))
+    }
+}
+
+impl OrganizationalUnit for Member {
+    fn dir(&self) -> anyhow::Result<PathBuf> {
+        self.guild_id.dir().map(|guild_dir| {
+            guild_dir
+                .join("members")
+                .join(self.user.id.get().to_string())
+        })
     }
 }
 
@@ -65,6 +83,11 @@ pub trait Data<U: OrganizationalUnit>: DeserializeOwned + Serialize + Default {
     }
 }
 
+impl<T: Data<U>, U: OrganizationalUnit> Data<&U> for T {
+    const PATH: &'static str = T::PATH;
+    const DESCRIPTOR: &'static str = T::DESCRIPTOR;
+}
+
 fn data_dir() -> anyhow::Result<PathBuf> {
     let project_dirs = ProjectDirs::from("com", "valentinegb", "mod-bot").ok_or(
         anyhow!("no valid home directory path could be retrieved from the operating system")
@@ -72,6 +95,24 @@ fn data_dir() -> anyhow::Result<PathBuf> {
     )?;
 
     Ok(project_dirs.data_dir().to_owned())
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Attribution {
+    pub user: UserId,
+    pub timestamp: u64,
+}
+
+impl From<UserId> for Attribution {
+    fn from(value: UserId) -> Self {
+        Self {
+            user: value,
+            timestamp: UNIX_EPOCH
+                .elapsed()
+                .expect(UNIX_EPOCH_ELAPSED_ERR)
+                .as_secs(),
+        }
+    }
 }
 
 /// This function assumes it is being called from within a guild-only command.
