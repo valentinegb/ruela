@@ -89,7 +89,7 @@ impl<T: Data<U>, U: OrganizationalUnit> Data<&U> for T {
 }
 
 fn data_dir() -> anyhow::Result<PathBuf> {
-    let project_dirs = ProjectDirs::from("com", "valentinegb", "mod-bot").ok_or(
+    let project_dirs = ProjectDirs::from("com", "valentinegb", "ruela").ok_or(
         anyhow!("no valid home directory path could be retrieved from the operating system")
             .context("could not construct project dirs"),
     )?;
