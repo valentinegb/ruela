@@ -97,7 +97,7 @@ fn data_dir() -> anyhow::Result<PathBuf> {
     Ok(project_dirs.data_dir().to_owned())
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Copy)]
 pub struct Attribution {
     pub user: UserId,
     pub timestamp: u64,

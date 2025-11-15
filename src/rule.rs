@@ -112,6 +112,8 @@ impl RulesMessage {
     }
 }
 
+// TODO: Add confirmation prompts to commands that warrant it.
+
 /// Commands related to the rules of this server.
 #[command(
     slash_command,

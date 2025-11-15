@@ -1,6 +1,6 @@
-mod convictions;
 mod data;
 mod rule;
+mod strikes;
 mod util;
 
 use poise::{
@@ -12,7 +12,7 @@ use poise::{
 use poise_error::anyhow;
 use tracing::{error, info, warn};
 
-use crate::{convictions::convict, rule::rule};
+use crate::{rule::rule, strikes::strike};
 
 struct EventHandler<'a> {
     commands: Vec<CreateCommand<'a>>,
@@ -52,7 +52,7 @@ async fn try_main() -> anyhow::Result<()> {
         warn!("Could not load `.env` file: {err:#}");
     }
 
-    let commands = vec![rule(), convict()];
+    let commands = vec![rule(), strike()];
     let mut client = serenity::Client::builder(
         Token::from_env("MOD_BOT_DISCORD_TOKEN")?,
         GatewayIntents::GUILDS,
