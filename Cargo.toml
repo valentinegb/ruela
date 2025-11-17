@@ -2,6 +2,7 @@
 name = "ruela"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.86.0"
 
 [dependencies]
 # Be sure serenity is on commit `5746fadda4313ff00898ee8b13eadcf08dd89442` in
