@@ -2,16 +2,16 @@
   "nodes": {
     "nixpkgs": {
       "locked": {
-        "lastModified": 1762841334,
-        "narHash": "sha256-48ihoOyLMvbTz/QTfZ2fjTd97kK6qCgMYqrIyHKcOlI=",
-        "owner": "tvbeat",
+        "lastModified": 1763049705,
+        "narHash": "sha256-A5LS0AJZ1yDPTa2fHxufZN++n8MCmtgrJDtxFxrH4S8=",
+        "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "f93a104922f934f31060c3d76c34b9ddcd8ce10b",
+        "rev": "3acb677ea67d4c6218f33de0db0955f116b7588c",
         "type": "github"
       },
       "original": {
-        "owner": "tvbeat",
-        "ref": "rust191-1",
+        "owner": "NixOS",
+        "ref": "nixos-25.05",
         "repo": "nixpkgs",
         "type": "github"
       }

@@ -1,7 +1,6 @@
 {
   inputs = {
-    # Change to NixOS/nixpkgs/nixos-unstable after rust 1.91.1 leaves staging
-    nixpkgs.url = "github:tvbeat/nixpkgs/rust191-1";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
   };
 
   outputs =
@@ -11,7 +10,7 @@
       packages =
         nixpkgs.lib.genAttrs (nixpkgs.lib.remove "x86_64-freebsd" nixpkgs.lib.systems.flakeExposed)
           (system: {
-            ruela = nixpkgs.legacyPackages.${system}.rustPlatform.buildRustPackage {
+            ruela = nixpkgs.legacyPackages.${system}.rustPackages_1_88.rustPlatform.buildRustPackage {
               pname = "ruela";
               version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
               src = ./.;
