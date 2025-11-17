@@ -133,11 +133,11 @@ async fn issue(
 async fn info(
     ctx: poise_error::Context<'_>,
     #[description = "The strike to see info on."]
-    #[rename = "num"]
+    #[rename = "strike"]
     strike_n: usize,
-    #[description = "The person the strike is on. Yourself, if not specified."]
-    #[rename = "for"]
-    member: Option<Member>,
+    #[description = "The person the strike is on. Yourself, if not specified."] member: Option<
+        Member,
+    >,
 ) -> anyhow::Result<()> {
     let author_member = ctx.author_member().await.expect(INVOCABLE_IN_GUILD);
     let member = member.as_ref().unwrap_or(author_member.as_ref());
@@ -161,16 +161,14 @@ async fn info(
     Ok(())
 }
 
-/// Repeal a strike issued to someone.
+/// Declare a strike as no longer valid.
 #[command(slash_command, required_permissions = "MODERATE_MEMBERS", ephemeral)]
 async fn repeal(
     ctx: poise_error::Context<'_>,
     #[description = "The strike to repeal."]
-    #[rename = "num"]
+    #[rename = "strike"]
     strike_n: usize,
-    #[description = "The person the strike is on."]
-    #[rename = "for"]
-    member: Member,
+    #[description = "The person the strike is on."] member: Member,
 ) -> anyhow::Result<()> {
     if &member.user == ctx.author() {
         bail!(UserError::from_str("You can't repeal a strike issued to yourself.").unwrap());
