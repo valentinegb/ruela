@@ -8,9 +8,9 @@ use poise::{
     CreateReply, command,
     serenity_prelude::{
         self as serenity, AutocompleteChoice, CacheHttp, CreateAllowedMentions,
-        CreateAutocompleteResponse, CreateComponent, CreateContainer, CreateSeparator,
-        CreateTextDisplay, EditMessage, GenericChannelId, GuildId, Mentionable, Message,
-        MessageFlags, MessageId, Permissions, StatusCode, UserId,
+        CreateAutocompleteResponse, CreateComponent, CreateContainer, CreateMessage,
+        CreateSeparator, CreateTextDisplay, EditMessage, GenericChannelId, GuildId, Mentionable,
+        Message, MessageFlags, MessageId, Permissions, StatusCode, UserId,
     },
 };
 use poise_error::{
@@ -19,8 +19,9 @@ use poise_error::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::data::{
-    Attribution, Data, INVOCABLE_IN_GUILD, UNIX_EPOCH_ELAPSED_ERR, get_guild_id_from_ctx,
+use crate::{
+    data::{Attribution, Data, INVOCABLE_IN_GUILD, UNIX_EPOCH_ELAPSED_ERR, get_guild_id_from_ctx},
+    util::{ConfirmationPrompt, send_safety_alert},
 };
 
 #[derive(Deserialize, Serialize, Default)]
@@ -72,7 +73,7 @@ impl Rule {
     }
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 struct AttributedText {
     text: String,
     attribution: Attribution,
@@ -132,26 +133,44 @@ async fn new(
 ) -> anyhow::Result<()> {
     let guild_id = get_guild_id_from_ctx(ctx);
     let mut rules = Rules::get_data_from(guild_id)?;
+    let rule = Rule::new(&text, ctx.author().id);
+    let components = vec![CreateComponent::Container(CreateContainer::new(vec![
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "### Rule {} Instated\n{}",
+            rules.len() + 1,
+            rule.original.text,
+        ))),
+        CreateComponent::Separator(CreateSeparator::new(true)),
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "-# Instated by {} <t:{}>",
+            rule.original.attribution.user.mention(),
+            rule.original.attribution.timestamp,
+        ))),
+    ]))];
+    let allowed_mentions = CreateAllowedMentions::new();
+    let prompt = ConfirmationPrompt {
+        components: components.clone(),
+        prompt: Some("Are you sure you want to instate this new rule?"),
+        elaboration: Some("You will be attributed."),
+        confirm_text: Some("Instate it"),
+        confirmed_text: Some("New rule instated"),
+        allowed_mentions: Some(allowed_mentions.clone()),
+        ..Default::default()
+    };
+    let confirmed = prompt.prompt(ctx).await?;
 
-    rules.push(Rule::new(&text, ctx.author().id));
-    rules.set_data_for(guild_id)?;
-    ctx.say(format!(
-        "Rule {}, {text:?}, has been instated.",
-        rules.len(),
-    ))
-    .await?;
-
-    if let Some(result) = RulesMessage::get_data_from(guild_id)?.get(ctx).await
-        && !result.as_ref().is_err_and(is_not_found_error)
-    {
-        let mut message = result?;
-
-        message
-            .edit(
-                ctx,
-                compile_rule_list(guild_id)?.to_prefix_edit(EditMessage::new()),
-            )
-            .await?;
+    if confirmed {
+        rules.push(rule);
+        rules.set_data_for(guild_id)?;
+        update_rule_list(ctx, guild_id).await?;
+        send_safety_alert(
+            ctx,
+            CreateMessage::new()
+                .flags(MessageFlags::IS_COMPONENTS_V2)
+                .components(components)
+                .allowed_mentions(allowed_mentions),
+        )
+        .await?;
     }
 
     Ok(())
@@ -179,21 +198,44 @@ async fn amend(
         )));
     }
 
-    let prev_text = rule
-        .amendments
-        .last()
-        .unwrap_or(&rule.original)
-        .text
-        .clone();
+    let amendment = AttributedText::new(text, ctx.author().id);
+    let components = vec![CreateComponent::Container(CreateContainer::new(vec![
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "### Rule {rule_n} Amended\n~~{rule}~~\n{}",
+            amendment.text,
+        ))),
+        CreateComponent::Separator(CreateSeparator::new(true)),
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "-# Amended by {} <t:{}>",
+            amendment.attribution.user.mention(),
+            amendment.attribution.timestamp,
+        ))),
+    ]))];
+    let allowed_mentions = CreateAllowedMentions::new();
+    let prompt = ConfirmationPrompt {
+        components: components.clone(),
+        prompt: Some("Are you sure you want to amend this rule?"),
+        elaboration: Some("You will be attributed."),
+        confirm_text: Some("Amend it"),
+        confirmed_text: Some("Rule amended"),
+        allowed_mentions: Some(allowed_mentions.clone()),
+        ..Default::default()
+    };
+    let confirmed = prompt.prompt(ctx).await?;
 
-    rule.amendments
-        .push(AttributedText::new(&text, ctx.author().id));
-    rules.set_data_for(guild_id)?;
-    ctx.say(format!(
-        "Rule {rule_n}, previously {prev_text:?}, has been amended to be {text:?}."
-    ))
-    .await?;
-    update_rule_list(ctx, guild_id).await?;
+    if confirmed {
+        rule.amendments.push(amendment);
+        rules.set_data_for(guild_id)?;
+        update_rule_list(ctx, guild_id).await?;
+        send_safety_alert(
+            ctx,
+            CreateMessage::new()
+                .flags(MessageFlags::IS_COMPONENTS_V2)
+                .components(components)
+                .allowed_mentions(allowed_mentions),
+        )
+        .await?;
+    }
 
     Ok(())
 }
@@ -219,19 +261,43 @@ async fn repeal(
         )));
     }
 
-    rule.repealed = Some(ctx.author().id.into());
+    let attribution: Attribution = ctx.author().id.into();
+    let components = vec![CreateComponent::Container(CreateContainer::new(vec![
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "### Rule {rule_n} Repealed\n~~{rule}~~",
+        ))),
+        CreateComponent::Separator(CreateSeparator::new(true)),
+        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+            "-# Repealed by {} <t:{}>",
+            attribution.user.mention(),
+            attribution.timestamp,
+        ))),
+    ]))];
+    let allowed_mentions = CreateAllowedMentions::new();
+    let prompt = ConfirmationPrompt {
+        components: components.clone(),
+        prompt: Some("Are you sure you want to repeal this rule?"),
+        elaboration: Some("You will be attributed."),
+        confirm_text: Some("Repeal it"),
+        confirmed_text: Some("Rule repealed"),
+        allowed_mentions: Some(allowed_mentions.clone()),
+        ..Default::default()
+    };
+    let confirmed = prompt.prompt(ctx).await?;
 
-    let rule_text = rule
-        .amendments
-        .last()
-        .unwrap_or(&rule.original)
-        .text
-        .clone();
-
-    rules.set_data_for(guild_id)?;
-    ctx.say(format!("Rule {rule_n}, {rule_text:?}, has been repealed."))
+    if confirmed {
+        rule.repealed = Some(attribution);
+        rules.set_data_for(guild_id)?;
+        update_rule_list(ctx, guild_id).await?;
+        send_safety_alert(
+            ctx,
+            CreateMessage::new()
+                .flags(MessageFlags::IS_COMPONENTS_V2)
+                .components(components)
+                .allowed_mentions(allowed_mentions),
+        )
         .await?;
-    update_rule_list(ctx, guild_id).await?;
+    }
 
     Ok(())
 }
