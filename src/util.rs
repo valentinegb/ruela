@@ -5,7 +5,8 @@ use poise::{
     serenity_prelude::{
         ButtonStyle, CollectComponentInteractions, CreateActionRow, CreateAllowedMentions,
         CreateButton, CreateComponent, CreateContainer, CreateInteractionResponse,
-        CreateInteractionResponseMessage, CreateTextDisplay, MessageFlags,
+        CreateInteractionResponseMessage, CreateSeparator, CreateTextDisplay, MessageFlags,
+        Spacing,
         colours::css::{DANGER, POSITIVE, WARNING},
         small_fixed_array::FixedString,
     },
@@ -76,8 +77,14 @@ impl<'a> ConfirmationPrompt<'a> {
     }
 
     fn create_reply(&'a self, component: CreateComponent<'a>) -> CreateReply<'a> {
-        let mut components = self.components.clone();
+        let mut components = vec![CreateComponent::TextDisplay(CreateTextDisplay::new(
+            "-# *Preview of Changes*",
+        ))];
 
+        components.extend(self.components.clone());
+        components.push(CreateComponent::Separator(
+            CreateSeparator::new(true).spacing(Spacing::Large),
+        ));
         components.push(component);
 
         let mut reply = CreateReply::new()
