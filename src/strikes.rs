@@ -6,7 +6,7 @@ use std::{
 use crate::{
     data::{Attribution, Data, INVOCABLE_IN_GUILD},
     rule::{Rules, rule_autocomplete},
-    util::ConfirmationPrompt,
+    util::{ConfirmationPrompt, send_safety_alert},
 };
 use poise::{
     CreateReply, command,
@@ -111,18 +111,7 @@ async fn issue(
             .widen()
             .send_message(ctx.http(), message.clone())
             .await?;
-
-        let safety_alerts_channel_id = ctx
-            .guild()
-            .expect(INVOCABLE_IN_GUILD)
-            .safety_alerts_channel_id;
-
-        if let Some(safety_alerts_channel_id) = safety_alerts_channel_id {
-            safety_alerts_channel_id
-                .widen()
-                .send_message(ctx.http(), message)
-                .await?;
-        }
+        send_safety_alert(ctx, message).await?;
     }
 
     Ok(())
@@ -214,18 +203,7 @@ async fn repeal(
             .widen()
             .send_message(ctx.http(), message.clone())
             .await?;
-
-        let safety_alerts_channel_id = ctx
-            .guild()
-            .expect(INVOCABLE_IN_GUILD)
-            .safety_alerts_channel_id;
-
-        if let Some(safety_alerts_channel_id) = safety_alerts_channel_id {
-            safety_alerts_channel_id
-                .widen()
-                .send_message(ctx.http(), message)
-                .await?;
-        }
+        send_safety_alert(ctx, message).await?;
     }
 
     Ok(())

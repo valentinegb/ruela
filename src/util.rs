@@ -5,13 +5,15 @@ use poise::{
     serenity_prelude::{
         ButtonStyle, CollectComponentInteractions, CreateActionRow, CreateAllowedMentions,
         CreateButton, CreateComponent, CreateContainer, CreateInteractionResponse,
-        CreateInteractionResponseMessage, CreateSeparator, CreateTextDisplay, MessageFlags,
-        Spacing,
+        CreateInteractionResponseMessage, CreateMessage, CreateSeparator, CreateTextDisplay,
+        MessageFlags, Spacing,
         colours::css::{DANGER, POSITIVE, WARNING},
         small_fixed_array::FixedString,
     },
 };
 use poise_error::anyhow;
+
+use crate::data::INVOCABLE_IN_GUILD;
 
 /// Should be used before actions which are irreversible. Reversible actions do
 /// not need confirmation.
@@ -161,4 +163,23 @@ impl<'a> ConfirmationPrompt<'a> {
 
         Ok(false)
     }
+}
+
+pub async fn send_safety_alert(
+    ctx: poise_error::Context<'_>,
+    message: CreateMessage<'_>,
+) -> anyhow::Result<()> {
+    let safety_alerts_channel_id = ctx
+        .guild()
+        .expect(INVOCABLE_IN_GUILD)
+        .safety_alerts_channel_id;
+
+    if let Some(safety_alerts_channel_id) = safety_alerts_channel_id {
+        safety_alerts_channel_id
+            .widen()
+            .send_message(ctx.http(), message)
+            .await?;
+    }
+
+    Ok(())
 }
