@@ -79,7 +79,7 @@ impl DerefMut for BanThreshold {
 /// Commands related to strikes.
 #[command(
     slash_command,
-    subcommands("issue", "info", "repeal", "record", "ban_threshold"),
+    subcommands("issue", "info", "repeal", "list", "ban_threshold"),
     interaction_context = "Guild"
 )]
 pub async fn strike(_ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
@@ -280,9 +280,9 @@ async fn repeal(
 
 /// See the all the strikes a person has a received.
 #[command(slash_command, ephemeral)]
-async fn record(
+async fn list(
     ctx: poise_error::Context<'_>,
-    #[description = "The person to see the record of. Yourself, if not specified."] member: Option<
+    #[description = "The person to see the strikes of. Yourself, if not specified."] member: Option<
         Member,
     >,
 ) -> anyhow::Result<()> {
@@ -329,10 +329,7 @@ async fn record(
         "/strike info"
     };
     let mut container_components = vec![CreateComponent::TextDisplay(CreateTextDisplay::new(
-        format!(
-            "### {}'s Strike Record{list_or_all_clean}",
-            member.mention()
-        ),
+        format!("### {}'s Strikes{list_or_all_clean}", member.mention()),
     ))];
 
     if !strikes.is_empty() {
