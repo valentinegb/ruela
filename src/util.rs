@@ -11,7 +11,7 @@ use poise::{
         small_fixed_array::FixedString,
     },
 };
-use poise_error::anyhow;
+use poise_error::anyhow::{self, Context};
 
 use crate::data::INVOCABLE_IN_GUILD;
 
@@ -178,7 +178,8 @@ pub async fn send_safety_alert(
         safety_alerts_channel_id
             .widen()
             .send_message(ctx.http(), message)
-            .await?;
+            .await
+            .context("could not send safety alert")?;
     }
 
     Ok(())

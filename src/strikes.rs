@@ -13,6 +13,7 @@ use poise::{
     serenity_prelude::{
         self as serenity, CreateAllowedMentions, CreateComponent, CreateContainer, CreateMessage,
         CreateSeparator, CreateTextDisplay, Member, Mentionable, MessageFlags,
+        colours::css::{DANGER, POSITIVE},
     },
 };
 use poise_error::{
@@ -54,7 +55,7 @@ struct Strike {
 /// Commands related to strikes.
 #[command(
     slash_command,
-    subcommands("issue", "info", "repeal"),
+    subcommands("issue", "info", "repeal", "record"),
     interaction_context = "Guild"
 )]
 pub async fn strike(_ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
@@ -205,6 +206,85 @@ async fn repeal(
             .await?;
         send_safety_alert(ctx, message).await?;
     }
+
+    Ok(())
+}
+
+/// See the all the strikes a person has a received.
+#[command(slash_command, ephemeral)]
+async fn record(
+    ctx: poise_error::Context<'_>,
+    #[description = "The person to see the record of. Yourself, if not specified."] member: Option<
+        Member,
+    >,
+) -> anyhow::Result<()> {
+    let author_member = ctx.author_member().await.expect(INVOCABLE_IN_GUILD);
+    let member = member.as_ref().unwrap_or(author_member.as_ref());
+
+    ensure_author_has_perms(ctx, member).await?;
+
+    let strikes = Strikes::get_data_from(member)?;
+    let mut list = String::new();
+    let mut color = DANGER;
+
+    for (i, strike) in strikes.iter().enumerate() {
+        let strikethrough = if strike.repeal.is_some() { "~~" } else { "" };
+        let rule_text = if let Some(rule_i) = strike.rule_i {
+            &format!("rule {}", rule_i + 1)
+        } else {
+            "*no rule specified*"
+        };
+
+        list += &format!(
+            "\n{strikethrough}**Strike {}**: {rule_text}{strikethrough}",
+            i + 1
+        );
+    }
+
+    let list_or_all_clean = if strikes.is_empty() {
+        color = POSITIVE;
+
+        "\n*All clean!*".to_string()
+    } else {
+        list
+    };
+
+    let strike_info_command_mention = if let Some(command) = ctx
+        .http()
+        .get_global_commands()
+        .await?
+        .into_iter()
+        .find(|command| command.name == "strike")
+    {
+        &format!("</strike info:{}>", command.id)
+    } else {
+        "/strike info"
+    };
+    let mut container_components = vec![CreateComponent::TextDisplay(CreateTextDisplay::new(
+        format!(
+            "### {}'s Strike Record{list_or_all_clean}",
+            member.mention()
+        ),
+    ))];
+
+    if !strikes.is_empty() {
+        container_components.extend_from_slice(&[
+            CreateComponent::Separator(CreateSeparator::new(true)),
+            CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+                "-# Use {strike_info_command_mention} to see more about a particular strike."
+            ))),
+        ]);
+    }
+
+    ctx.send(
+        CreateReply::new()
+            .flags(MessageFlags::IS_COMPONENTS_V2)
+            .components(&[CreateComponent::Container(
+                CreateContainer::new(container_components).accent_color(color),
+            )])
+            .allowed_mentions(CreateAllowedMentions::new()),
+    )
+    .await?;
 
     Ok(())
 }
