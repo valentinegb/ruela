@@ -142,7 +142,7 @@ async fn new(
         ))),
         CreateComponent::Separator(CreateSeparator::new(true)),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "-# Instated by {} <t:{}>",
+            "-# Instated by {} on <t:{}>.",
             rule.original.attribution.user.mention(),
             rule.original.attribution.timestamp,
         ))),
@@ -206,7 +206,7 @@ async fn amend(
         ))),
         CreateComponent::Separator(CreateSeparator::new(true)),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "-# Amended by {} <t:{}>",
+            "-# Amended by {} on <t:{}>.",
             amendment.attribution.user.mention(),
             amendment.attribution.timestamp,
         ))),
@@ -268,7 +268,7 @@ async fn repeal(
         ))),
         CreateComponent::Separator(CreateSeparator::new(true)),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "-# Repealed by {} <t:{}>",
+            "-# Repealed by {} on <t:{}>.",
             attribution.user.mention(),
             attribution.timestamp,
         ))),
@@ -435,7 +435,7 @@ fn compile_rule_list<'a>(guild_id: GuildId) -> anyhow::Result<CreateReply<'a>> {
                 ))),
                 CreateComponent::Separator(CreateSeparator::new(true)),
                 CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-                    "-# Last updated <t:{}:R>",
+                    "-# Last updated <t:{}:R>.",
                     UNIX_EPOCH
                         .elapsed()
                         .expect(UNIX_EPOCH_ELAPSED_ERR)
@@ -535,7 +535,7 @@ async fn history(ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
                     ))),
                     CreateComponent::Separator(CreateSeparator::new(true)),
                     CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-                        "-# Last updated <t:{}:R>",
+                        "-# Last updated <t:{}:R>.",
                         UNIX_EPOCH
                             .elapsed()
                             .expect(UNIX_EPOCH_ELAPSED_ERR)

@@ -497,7 +497,7 @@ fn component_for_strike<'a>(
     let strikethrough = if strike.repeal.is_some() { "~~" } else { "" };
     let repeal_info = if let Some(repeal) = strike.repeal {
         &format!(
-            "\n-# Repealed by {} on <t:{}>",
+            "\n-# Repealed by {} on <t:{}>.",
             repeal.user.mention(),
             repeal.timestamp,
         )
@@ -525,7 +525,7 @@ fn component_for_strike<'a>(
         ))),
         CreateComponent::Separator(CreateSeparator::new(true)),
         CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-            "-# Issued by {} on <t:{}>{repeal_info}",
+            "-# Issued by {} on <t:{}>{repeal_info}.",
             strike.attribution.user.mention(),
             strike.attribution.timestamp,
         ))),
