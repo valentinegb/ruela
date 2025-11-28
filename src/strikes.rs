@@ -19,7 +19,7 @@ use poise::{
 };
 use poise_error::{
     UserError,
-    anyhow::{self, bail},
+    anyhow::{self, anyhow, bail},
 };
 use serde::{Deserialize, Serialize};
 use tracing::error;
@@ -292,13 +292,19 @@ async fn list(
     ensure_author_has_perms(ctx, member).await?;
 
     let strikes = Strikes::get_data_from(member)?;
+    let rules = Rules::get_data_from(member.guild_id)?;
     let mut list = String::new();
     let mut color = DANGER;
 
     for (i, strike) in strikes.iter().enumerate() {
         let strikethrough = if strike.repeal.is_some() { "~~" } else { "" };
         let rule_text = if let Some(rule_i) = strike.rule_i {
-            &format!("rule {}", rule_i + 1)
+            let rule_n = rule_i + 1;
+            let rule = rules
+                .get(rule_i)
+                .ok_or(anyhow!("there is no rule {rule_n}"))?;
+
+            &format!("rule {rule_n}. {rule}")
         } else {
             "*no rule specified*"
         };
