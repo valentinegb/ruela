@@ -162,15 +162,20 @@ async fn new(
     if confirmed {
         rules.push(rule);
         rules.set_data_for(guild_id)?;
-        update_rule_list(ctx, guild_id).await?;
-        send_safety_alert(
-            ctx,
-            CreateMessage::new()
-                .flags(MessageFlags::IS_COMPONENTS_V2)
-                .components(components)
-                .allowed_mentions(allowed_mentions),
-        )
-        .await?;
+
+        let (rule_list_result, safety_result_result) = tokio::join!(
+            update_rule_list(ctx, guild_id),
+            send_safety_alert(
+                ctx,
+                CreateMessage::new()
+                    .flags(MessageFlags::IS_COMPONENTS_V2)
+                    .components(components)
+                    .allowed_mentions(allowed_mentions),
+            ),
+        );
+
+        rule_list_result?;
+        safety_result_result?;
     }
 
     Ok(())
@@ -226,15 +231,20 @@ async fn amend(
     if confirmed {
         rule.amendments.push(amendment);
         rules.set_data_for(guild_id)?;
-        update_rule_list(ctx, guild_id).await?;
-        send_safety_alert(
-            ctx,
-            CreateMessage::new()
-                .flags(MessageFlags::IS_COMPONENTS_V2)
-                .components(components)
-                .allowed_mentions(allowed_mentions),
-        )
-        .await?;
+
+        let (rule_list_result, safety_result_result) = tokio::join!(
+            update_rule_list(ctx, guild_id),
+            send_safety_alert(
+                ctx,
+                CreateMessage::new()
+                    .flags(MessageFlags::IS_COMPONENTS_V2)
+                    .components(components)
+                    .allowed_mentions(allowed_mentions),
+            ),
+        );
+
+        rule_list_result?;
+        safety_result_result?;
     }
 
     Ok(())
@@ -288,74 +298,20 @@ async fn repeal(
     if confirmed {
         rule.repealed = Some(attribution);
         rules.set_data_for(guild_id)?;
-        update_rule_list(ctx, guild_id).await?;
-        send_safety_alert(
-            ctx,
-            CreateMessage::new()
-                .flags(MessageFlags::IS_COMPONENTS_V2)
-                .components(components)
-                .allowed_mentions(allowed_mentions),
-        )
-        .await?;
-    }
 
-    Ok(())
-}
-
-pub async fn rule_autocomplete<'a>(
-    ctx: poise_error::Context<'_>,
-    query: &str,
-) -> CreateAutocompleteResponse<'a> {
-    // Noooo! You can't just read and deserialize the rules every single time a
-    // user types a letter into the rule option!!!!
-    // The chad:
-    let rules = Rules::get_data_from(get_guild_id_from_ctx(ctx)).unwrap();
-    // It's better for this ^ to panic than for this function to return an empty
-    // list, because returning an empty list will cause Discord to say there
-    // were no results, while panicking will cause Discord to say that an error
-    // occurred, which is more correct.
-
-    CreateAutocompleteResponse::new().set_choices(
-        rules
-            .iter()
-            .enumerate()
-            .filter(|(_i, rule)| rule.repealed.is_none())
-            .map(|(i, rule)| {
-                let rule_n = i as u64 + 1;
-
-                (rule_n, format!("{rule_n}. {rule}"))
-            })
-            .filter(|(_rule_n, str)| str.to_lowercase().contains(query))
-            .map(|(rule_n, mut str)| {
-                AutocompleteChoice::new(
-                    // FIXME: Markdown formatting should be removed since
-                    // autocomplete options displayed using Markdown.
-                    if str.len() > 99 {
-                        str.truncate(99);
-
-                        str + "…"
-                    } else {
-                        str
-                    },
-                    rule_n,
-                )
-            })
-            .collect::<Vec<AutocompleteChoice>>(),
-    )
-}
-
-async fn update_rule_list(ctx: poise_error::Context<'_>, guild_id: GuildId) -> anyhow::Result<()> {
-    if let Some(result) = RulesMessage::get_data_from(guild_id)?.get(ctx).await
-        && !result.as_ref().is_err_and(is_not_found_error)
-    {
-        let mut message = result?;
-
-        message
-            .edit(
+        let (rule_list_result, safety_result_result) = tokio::join!(
+            update_rule_list(ctx, guild_id),
+            send_safety_alert(
                 ctx,
-                compile_rule_list(guild_id)?.to_prefix_edit(EditMessage::new()),
-            )
-            .await?;
+                CreateMessage::new()
+                    .flags(MessageFlags::IS_COMPONENTS_V2)
+                    .components(components)
+                    .allowed_mentions(allowed_mentions),
+            ),
+        );
+
+        rule_list_result?;
+        safety_result_result?;
     }
 
     Ok(())
@@ -409,52 +365,6 @@ async fn list(
     }
 
     Ok(())
-}
-
-fn compile_rule_list<'a>(guild_id: GuildId) -> anyhow::Result<CreateReply<'a>> {
-    let rules = Rules::get_data_from(guild_id)?;
-    let rule_list_items: Vec<String> = rules
-        .iter()
-        .enumerate()
-        .filter(|(_i, rule)| rule.repealed.is_none())
-        .map(|(i, rule)| format!("{}\\. {rule}", i + 1))
-        .collect();
-
-    Ok(CreateReply::new()
-        .flags(MessageFlags::IS_COMPONENTS_V2)
-        .components(vec![CreateComponent::Container(CreateContainer::new(
-            vec![
-                CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-                    "### Rules\n\
-                     {}",
-                    if rule_list_items.is_empty() {
-                        "There are none. Let there be anarchy!".to_string()
-                    } else {
-                        rule_list_items.join("\n")
-                    }
-                ))),
-                CreateComponent::Separator(CreateSeparator::new(true)),
-                CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-                    "-# Last updated <t:{}:R>.",
-                    UNIX_EPOCH
-                        .elapsed()
-                        .expect(UNIX_EPOCH_ELAPSED_ERR)
-                        .as_secs(),
-                ))),
-            ],
-        ))]))
-}
-
-fn is_not_found_error(err: &serenity::Error) -> bool {
-    if let serenity::Error::Http(http_err) = err
-        && http_err
-            .status_code()
-            .is_some_and(|status_code| status_code == StatusCode::NOT_FOUND)
-    {
-        true
-    } else {
-        false
-    }
 }
 
 /// Lists everything that's happened to the rules in chronological order.
@@ -548,4 +458,109 @@ async fn history(ctx: poise_error::Context<'_>) -> anyhow::Result<()> {
     .await?;
 
     Ok(())
+}
+
+pub async fn rule_autocomplete<'a>(
+    ctx: poise_error::Context<'_>,
+    query: &str,
+) -> CreateAutocompleteResponse<'a> {
+    // Noooo! You can't just read and deserialize the rules every single time a
+    // user types a letter into the rule option!!!!
+    // The chad:
+    let rules = Rules::get_data_from(get_guild_id_from_ctx(ctx)).unwrap();
+    // It's better for this ^ to panic than for this function to return an empty
+    // list, because returning an empty list will cause Discord to say there
+    // were no results, while panicking will cause Discord to say that an error
+    // occurred, which is more correct.
+
+    CreateAutocompleteResponse::new().set_choices(
+        rules
+            .iter()
+            .enumerate()
+            .filter(|(_i, rule)| rule.repealed.is_none())
+            .map(|(i, rule)| {
+                let rule_n = i as u64 + 1;
+
+                (rule_n, format!("{rule_n}. {rule}"))
+            })
+            .filter(|(_rule_n, str)| str.to_lowercase().contains(query))
+            .map(|(rule_n, mut str)| {
+                AutocompleteChoice::new(
+                    // FIXME: Markdown formatting should be removed since
+                    // autocomplete options displayed using Markdown.
+                    if str.len() > 99 {
+                        str.truncate(99);
+
+                        str + "…"
+                    } else {
+                        str
+                    },
+                    rule_n,
+                )
+            })
+            .collect::<Vec<AutocompleteChoice>>(),
+    )
+}
+
+async fn update_rule_list(ctx: poise_error::Context<'_>, guild_id: GuildId) -> anyhow::Result<()> {
+    if let Some(result) = RulesMessage::get_data_from(guild_id)?.get(ctx).await
+        && !result.as_ref().is_err_and(is_not_found_error)
+    {
+        let mut message = result?;
+
+        message
+            .edit(
+                ctx,
+                compile_rule_list(guild_id)?.to_prefix_edit(EditMessage::new()),
+            )
+            .await?;
+    }
+
+    Ok(())
+}
+
+fn compile_rule_list<'a>(guild_id: GuildId) -> anyhow::Result<CreateReply<'a>> {
+    let rules = Rules::get_data_from(guild_id)?;
+    let rule_list_items: Vec<String> = rules
+        .iter()
+        .enumerate()
+        .filter(|(_i, rule)| rule.repealed.is_none())
+        .map(|(i, rule)| format!("{}\\. {rule}", i + 1))
+        .collect();
+
+    Ok(CreateReply::new()
+        .flags(MessageFlags::IS_COMPONENTS_V2)
+        .components(vec![CreateComponent::Container(CreateContainer::new(
+            vec![
+                CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+                    "### Rules\n\
+                     {}",
+                    if rule_list_items.is_empty() {
+                        "There are none. Let there be anarchy!".to_string()
+                    } else {
+                        rule_list_items.join("\n")
+                    }
+                ))),
+                CreateComponent::Separator(CreateSeparator::new(true)),
+                CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+                    "-# Last updated <t:{}:R>.",
+                    UNIX_EPOCH
+                        .elapsed()
+                        .expect(UNIX_EPOCH_ELAPSED_ERR)
+                        .as_secs(),
+                ))),
+            ],
+        ))]))
+}
+
+fn is_not_found_error(err: &serenity::Error) -> bool {
+    if let serenity::Error::Http(http_err) = err
+        && http_err
+            .status_code()
+            .is_some_and(|status_code| status_code == StatusCode::NOT_FOUND)
+    {
+        true
+    } else {
+        false
+    }
 }

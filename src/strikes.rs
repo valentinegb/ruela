@@ -22,7 +22,6 @@ use poise_error::{
     anyhow::{self, anyhow, bail},
 };
 use serde::{Deserialize, Serialize};
-use tracing::error;
 
 #[derive(Deserialize, Serialize, Default)]
 struct Strikes(Vec<Strike>);
@@ -127,10 +126,25 @@ async fn issue(
             .flags(MessageFlags::IS_COMPONENTS_V2)
             .components(components)
             .allowed_mentions(allowed_mentions);
-        let dms = member.user.create_dm_channel(ctx).await?.id.widen();
+        let (strike_dm_result, strike_safety_alert_result) = tokio::join!(
+            {
+                let message = message.clone();
 
-        dms.send_message(ctx.http(), message.clone()).await?;
-        send_safety_alert(ctx, message).await?;
+                async {
+                    // "Don't Repeat Yourself"? Good fucking luck
+                    match member
+                        .user
+                        .create_dm_channel(ctx)
+                        .await
+                        .map(|channel| channel.id.widen())
+                    {
+                        Ok(dms) => dms.send_message(ctx.http(), message).await,
+                        Err(err) => Err(err),
+                    }
+                }
+            },
+            send_safety_alert(ctx, message),
+        );
 
         if let Some(ban_threshold) =
             *BanThreshold::get_data_from(ctx.guild_id().expect(INVOCABLE_IN_GUILD))?
@@ -141,46 +155,65 @@ async fn issue(
                 .count();
 
             if non_repealed_strikes >= ban_threshold {
-                if let Err(err) = dms.send_message(
-                    ctx.http(),
-                    CreateMessage::new()
-                        .flags(MessageFlags::IS_COMPONENTS_V2)
-                        .components(&[CreateComponent::Container(
-                            CreateContainer::new(&[CreateComponent::TextDisplay(
-                                CreateTextDisplay::new(format!(
-                                    "### Strike Ban Threshold Met\n\
-                                    You have accumulated **{non_repealed_strikes} strikes** and thus are being automatically banned.",
-                                )),
+                let (ban_dm_result, ban_safety_alert_result) = tokio::join!(
+                    async {
+                        match member
+                            .user
+                            .create_dm_channel(ctx)
+                            .await
+                            .map(|channel| channel.id.widen())
+                        {
+                            Ok(dms) => {
+                                dms.send_message(
+                                    ctx.http(),
+                                    CreateMessage::new()
+                                        .flags(MessageFlags::IS_COMPONENTS_V2)
+                                        .components(vec![CreateComponent::Container(
+                                            CreateContainer::new(vec![
+                                                CreateComponent::TextDisplay(
+                                                    CreateTextDisplay::new(format!(
+                                                        "### Strike Ban Threshold Met\n\
+                                                        You have accumulated **{non_repealed_strikes} strikes** and thus are being automatically banned.",
+                                                    )),
+                                                ),
+                                            ])
+                                            .accent_color(DANGER),
+                                        )]),
+                                )
+                                .await
+                            }
+                            Err(err) => Err(err),
+                        }
+                    },
+                    send_safety_alert(
+                        ctx,
+                        CreateMessage::new()
+                            .flags(MessageFlags::IS_COMPONENTS_V2)
+                            .components(vec![CreateComponent::Container(
+                                CreateContainer::new(vec![CreateComponent::TextDisplay(
+                                    CreateTextDisplay::new(format!(
+                                        "### Strike Ban Threshold Met\n\
+                                        {} accumulated **{non_repealed_strikes} strikes** and thus is being automatically banned.",
+                                        member.mention(),
+                                    )),
+                                )])
+                                .accent_color(DANGER),
                             )])
-                            .accent_color(DANGER),
-                        )]),
-                )
-                .await {
-                    error!("Failed to inform member about being banned: {err:#}");
-                }
+                            .allowed_mentions(CreateAllowedMentions::new()),
+                    )
+                );
 
                 member
                     .ban(ctx.http(), 0, Some("Strike ban threshold met."))
                     .await?;
-                send_safety_alert(
-                    ctx,
-                    CreateMessage::new()
-                        .flags(MessageFlags::IS_COMPONENTS_V2)
-                        .components(&[CreateComponent::Container(
-                            CreateContainer::new(&[CreateComponent::TextDisplay(
-                                CreateTextDisplay::new(format!(
-                                    "### Strike Ban Threshold Met\n\
-                                    {} accumulated **{non_repealed_strikes} strikes** and thus is being automatically banned.",
-                                    member.mention(),
-                                )),
-                            )])
-                            .accent_color(DANGER),
-                        )])
-                        .allowed_mentions(CreateAllowedMentions::new()),
-                )
-                .await?;
+
+                ban_dm_result?;
+                ban_safety_alert_result?;
             }
         }
+
+        strike_dm_result?;
+        strike_safety_alert_result?;
     }
 
     Ok(())
@@ -264,15 +297,22 @@ async fn repeal(
             .components(components)
             .allowed_mentions(allowed_mentions);
 
-        member
-            .user
-            .create_dm_channel(ctx)
-            .await?
-            .id
-            .widen()
-            .send_message(ctx.http(), message.clone())
-            .await?;
-        send_safety_alert(ctx, message).await?;
+        let (dm_result, safety_alert_result) = tokio::join!(
+            {
+                let message = message.clone();
+
+                async {
+                    match member.user.create_dm_channel(ctx).await {
+                        Ok(dms) => dms.id.widen().send_message(ctx.http(), message).await,
+                        Err(err) => Err(err),
+                    }
+                }
+            },
+            send_safety_alert(ctx, message),
+        );
+
+        dm_result?;
+        safety_alert_result?;
     }
 
     Ok(())
@@ -438,33 +478,38 @@ async fn set(
         "### Strike Ban Threshold\n{description}"
     )));
 
-    ctx.send(
-        CreateReply::new()
-            .flags(MessageFlags::IS_COMPONENTS_V2)
-            .components(vec![CreateComponent::Container(CreateContainer::new(
-                vec![main_text.clone()],
-            ))]),
-    )
-    .await?;
-    send_safety_alert(
-        ctx,
-        CreateMessage::new()
-            .flags(MessageFlags::IS_COMPONENTS_V2)
-            .components(&[CreateComponent::Container(CreateContainer::new(&[
-                main_text,
-                CreateComponent::Separator(CreateSeparator::new(true)),
-                CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
-                    "-# Set by {} on <t:{}>.",
-                    ctx.author().mention(),
-                    UNIX_EPOCH
-                        .elapsed()
-                        .expect(UNIX_EPOCH_ELAPSED_ERR)
-                        .as_secs(),
-                ))),
-            ]))])
-            .allowed_mentions(CreateAllowedMentions::new()),
-    )
-    .await?;
+    let (reply_result, safety_alert_result) = tokio::join!(
+        ctx.send(
+            CreateReply::new()
+                .flags(MessageFlags::IS_COMPONENTS_V2)
+                .components(vec![CreateComponent::Container(CreateContainer::new(
+                    vec![main_text.clone()],
+                ))]),
+        ),
+        send_safety_alert(
+            ctx,
+            CreateMessage::new()
+                .flags(MessageFlags::IS_COMPONENTS_V2)
+                .components(vec![CreateComponent::Container(CreateContainer::new(
+                    vec![
+                        main_text,
+                        CreateComponent::Separator(CreateSeparator::new(true)),
+                        CreateComponent::TextDisplay(CreateTextDisplay::new(format!(
+                            "-# Set by {} on <t:{}>.",
+                            ctx.author().mention(),
+                            UNIX_EPOCH
+                                .elapsed()
+                                .expect(UNIX_EPOCH_ELAPSED_ERR)
+                                .as_secs(),
+                        ))),
+                    ]
+                ))])
+                .allowed_mentions(CreateAllowedMentions::new()),
+        ),
+    );
+
+    reply_result?;
+    safety_alert_result?;
 
     Ok(())
 }
