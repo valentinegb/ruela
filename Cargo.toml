@@ -2,8 +2,8 @@
 name = "ruela"
 version = "0.6.0"
 edition = "2024"
-# Latest version available on nixos-25.05
-rust-version = "1.89"
+# Latest version available on nixos-25.11
+rust-version = "1.91"
 
 [dependencies]
 # Be sure serenity is on commit `5746fadda4313ff00898ee8b13eadcf08dd89442` in

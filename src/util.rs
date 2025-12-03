@@ -118,9 +118,7 @@ impl<'a> ConfirmationPrompt<'a> {
                 ]
                 .into(),
             )
-            // TODO: Uncomment when at least 1.91.0 makes it to Nix 25.05
-            // .timeout(Duration::from_mins(1))
-            .timeout(Duration::from_secs(60))
+            .timeout(Duration::from_mins(1))
             .await
         {
             Some(interaction) => match interaction.data.custom_id.as_str() {

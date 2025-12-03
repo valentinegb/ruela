@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
   };
 
   outputs =
@@ -10,7 +10,7 @@
       packages =
         nixpkgs.lib.genAttrs (nixpkgs.lib.remove "x86_64-freebsd" nixpkgs.lib.systems.flakeExposed)
           (system: {
-            ruela = nixpkgs.legacyPackages.${system}.rustPackages_1_89.rustPlatform.buildRustPackage {
+            ruela = nixpkgs.legacyPackages.${system}.rustPlatform.buildRustPackage {
               pname = "ruela";
               version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
               src = ./.;
